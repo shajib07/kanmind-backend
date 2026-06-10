@@ -36,3 +36,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
         user.first_name = fullname
         user.save()
         return user
+    
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already exists.")
+        return value
