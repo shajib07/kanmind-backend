@@ -1,5 +1,4 @@
 from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
 from rest_framework import permissions, status
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
@@ -38,11 +37,17 @@ class LoginView(APIView):
         email = request.data.get('email')
         password = request.data.get('password')
 
+        if not email or not password:
+            return Response(
+                {'detail': 'Email and password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         user = authenticate(username=email, password=password)
 
         if not user:
             return Response(
-                {'detail': 'Invalid credentials.'},
+                {'detail': 'Invalid email or password.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -57,19 +62,3 @@ class LoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
-class EmailCheckView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request):
-        email = request.query_params.get('email')
-        exists = User.objects.filter(email=email).exists()
-    
-        if not email:
-            return Response(
-                {'detail': 'Email is required.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        return Response({'exists': exists}, status=status.HTTP_200_OK)
