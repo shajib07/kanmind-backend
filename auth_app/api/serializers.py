@@ -41,3 +41,23 @@ class RegistrationSerializer(serializers.ModelSerializer):
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("Email already exists.")
         return value
+
+class UserSummarySerializer(serializers.ModelSerializer):
+    fullname = serializers.CharField(source='first_name')
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'email',
+            'fullname',
+        ]
+
+
+
+
+
+
+
+
+
