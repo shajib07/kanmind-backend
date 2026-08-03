@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -8,6 +8,7 @@ from kanban_app.api.permissions import (
     IsBoardOwner,
     IsCommentAuthor,
     IsCommentBoardMember,
+    IsTaskCreatorOrBoardOwner,
     IsTaskBoardMember,
 )
 from kanban_app.api.serializers import (
@@ -19,12 +20,54 @@ from kanban_app.api.serializers import (
     TaskCreateSerializer,
     TaskSerializer,
     TaskUpdateSerializer,
+    TaskUpdateResponseSerializer,
 )
 from kanban_app.models import Board, Comment, Task
 
 
+def get_board_annotations():
+    to_do = Q(tasks__status=Task.StatusChoices.TO_DO)
+    high_priority = Q(tasks__priority=Task.PriorityChoices.HIGH)
+
+    return {
+        'member_count': Count('members', distinct=True),
+        'ticket_count': Count('tasks', distinct=True),
+        'tasks_to_do_count': Count(
+            'tasks', filter=to_do, distinct=True,
+        ),
+        'tasks_high_prio_count': Count(
+            'tasks', filter=high_priority, distinct=True,
+        ),
+    }
+
+
+def get_accessible_boards(user):
+    return (
+        Board.objects
+        .annotate(**get_board_annotations())
+        .filter(Q(owner=user) | Q(members=user))
+        .distinct()
+    )
+
+
+def get_board_tasks_queryset():
+    return (
+        Task.objects
+        .select_related('assignee', 'reviewer')
+        .annotate(comments_count=Count('comments'))
+    )
+
+
 class BoardViewSet(viewsets.ModelViewSet):
     serializer_class = BoardListSerializer
+    http_method_names = [
+        'get',
+        'post',
+        'patch',
+        'delete',
+        'head',
+        'options',
+    ]
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
@@ -62,46 +105,40 @@ class BoardViewSet(viewsets.ModelViewSet):
         serializer.save(owner=self.request.user)
 
     def get_queryset(self):
-        return (
-            Board.objects
-            .annotate(
-                member_count=Count(
-                    'members',
-                    distinct=True,
-                ),
-                ticket_count=Count(
-                    'tasks',
-                    distinct=True,
-                ),
-                tasks_to_do_count=Count(
-                    'tasks',
-                    filter=Q(
-                        tasks__status=Task.StatusChoices.TO_DO,
-                    ),
-                    distinct=True,
-                ),
-                tasks_high_prio_count=Count(
-                    'tasks',
-                    filter=Q(
-                        tasks__priority=Task.PriorityChoices.HIGH,
-                    ),
-                    distinct=True,
-                ),
-            )
-            .filter(
-                Q(owner=self.request.user)
-                | Q(members=self.request.user)
-            )
-            .distinct()
+        queryset = get_accessible_boards(self.request.user)
+        if self.action != 'retrieve':
+            return queryset
+
+        tasks = Prefetch(
+            'tasks',
+            queryset=get_board_tasks_queryset(),
         )
+        return queryset.prefetch_related(tasks)
 
 
 class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
+    http_method_names = [
+        'get',
+        'post',
+        'patch',
+        'delete',
+        'head',
+        'options',
+    ]
     permission_classes = [
         IsAuthenticated,
         IsTaskBoardMember,
     ]
+
+    def get_permissions(self):
+        if self.action == 'destroy':
+            return [
+                IsAuthenticated(),
+                IsTaskCreatorOrBoardOwner(),
+            ]
+
+        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -136,7 +173,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         serializer.save()
 
         task = self.get_queryset().get(pk=task.pk)
-        response_serializer = TaskSerializer(task)
+        response_serializer = TaskUpdateResponseSerializer(task)
         return Response(response_serializer.data)
 
     def perform_create(self, serializer):
@@ -167,11 +204,18 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def get_queryset(self):
-        return (
+        queryset = (
             Task.objects
             .select_related('assignee', 'reviewer')
             .annotate(comments_count=Count('comments'))
         )
+
+        if self.action == 'list':
+            return queryset.filter(
+                board__members=self.request.user
+            )
+
+        return queryset
 
 
 class CommentViewSet(viewsets.ModelViewSet):

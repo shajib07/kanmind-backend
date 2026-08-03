@@ -146,15 +146,12 @@ class TaskUpdateSerializer(serializers.ModelSerializer):
         member_ids = set(
             board.members.values_list('id', flat=True)
         )
-
         for role in ('assignee', 'reviewer'):
             user = attrs.get(role)
-
             if user and user.id not in member_ids:
                 raise serializers.ValidationError({
                     f'{role}_id': 'User must be a board member.',
                 })
-
         return attrs
 
 
@@ -176,6 +173,40 @@ class TaskSerializer(serializers.ModelSerializer):
             'reviewer',
             'due_date',
             'comments_count',
+        ]
+
+
+class BoardTaskSerializer(TaskSerializer):
+    class Meta:
+        model = Task
+        fields = [
+            'id',
+            'title',
+            'description',
+            'status',
+            'priority',
+            'assignee',
+            'reviewer',
+            'due_date',
+            'comments_count',
+        ]
+
+
+class TaskUpdateResponseSerializer(serializers.ModelSerializer):
+    assignee = UserSummarySerializer(read_only=True)
+    reviewer = UserSummarySerializer(read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'id',
+            'title',
+            'description',
+            'status',
+            'priority',
+            'assignee',
+            'reviewer',
+            'due_date',
         ]
 
 
@@ -204,7 +235,7 @@ class BoardDetailSerializer(serializers.ModelSerializer):
         many=True,
         read_only=True,
     )
-    tasks = TaskSerializer(
+    tasks = BoardTaskSerializer(
         many=True,
         read_only=True,
     )

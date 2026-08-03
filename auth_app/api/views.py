@@ -1,13 +1,26 @@
-from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
 from rest_framework import permissions, status
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
 
-from auth_app.api.serializers import RegistrationSerializer, UserSummarySerializer
+from auth_app.api.serializers import (
+    EmailCheckSerializer,
+    LoginSerializer,
+    RegistrationSerializer,
+    UserSummarySerializer,
+)
+
+
+def get_auth_response_data(user):
+    token, _ = Token.objects.get_or_create(user=user)
+
+    return {
+        'token': token.key,
+        'fullname': user.first_name,
+        'email': user.email,
+        'user_id': user.id,
+    }
 
 
 class RegistrationView(APIView):
@@ -15,84 +28,43 @@ class RegistrationView(APIView):
 
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
 
-        if serializer.is_valid():
-            user = serializer.save()
-            token, created = Token.objects.get_or_create(user=user)
-
-            return Response(
-                {
-                    'token': token.key,
-                    'fullname': user.first_name,
-                    'email': user.email,
-                    'user_id': user.id,
-                },
-                status=status.HTTP_201_CREATED,
-            )
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            get_auth_response_data(user),
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
-
-        if not email or not password:
-            return Response(
-                {'detail': 'Email and password are required.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        user = authenticate(username=email, password=password)
-
-        if not user:
-            return Response(
-                {'detail': 'Invalid email or password.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        token, created = Token.objects.get_or_create(user=user)
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
 
         return Response(
-            {
-                'token': token.key,
-                'fullname': user.first_name,
-                'email': user.email,
-                'user_id': user.id,
-            },
+            get_auth_response_data(user),
             status=status.HTTP_200_OK,
         )
+
 
 class EmailCheckView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        email = request.query_params.get('email')
-
-        if not email:
-            return Response(
-                {'detail': 'Email query parameter is required.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            validate_email(email)
-        except ValidationError:
-            return Response(
-                {'detail': 'Invalid email address.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        serializer = EmailCheckSerializer(
+            data=request.query_params
+        )
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
         user = User.objects.filter(email=email).first()
-
         if user is None:
             return Response(
                 {'detail': 'Email not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        serializer = UserSummarySerializer(user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        response_serializer = UserSummarySerializer(user)
+        return Response(response_serializer.data)
