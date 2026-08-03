@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
 
+
 class Board(models.Model):
     objects = models.Manager()
 
@@ -8,7 +9,7 @@ class Board(models.Model):
     owner = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='owned_boards'
+        related_name='owned_boards',
     )
 
     members = models.ManyToManyField(
