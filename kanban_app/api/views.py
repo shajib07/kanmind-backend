@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from kanban_app.api.permissions import (
+    IsBoardMemberOrOwner,
     IsBoardOwner,
     IsCommentAuthor,
     IsCommentBoardMember,
@@ -74,6 +75,9 @@ class BoardViewSet(viewsets.ModelViewSet):
         if self.action == 'destroy':
             return [IsAuthenticated(), IsBoardOwner()]
 
+        if self.action in ('retrieve', 'partial_update'):
+            return [IsAuthenticated(), IsBoardMemberOrOwner()]
+
         return super().get_permissions()
 
     def get_serializer_class(self):
@@ -105,7 +109,14 @@ class BoardViewSet(viewsets.ModelViewSet):
         serializer.save(owner=self.request.user)
 
     def get_queryset(self):
-        queryset = get_accessible_boards(self.request.user)
+        # The ``list`` action is scoped to boards the user can access. Detail
+        # actions query across all boards so that object-level permissions can
+        # return ``403`` for an existing board the user may not access, while a
+        # missing board still returns ``404``.
+        if self.action == 'list':
+            return get_accessible_boards(self.request.user)
+
+        queryset = Board.objects.annotate(**get_board_annotations())
         if self.action != 'retrieve':
             return queryset
 
@@ -117,6 +128,12 @@ class BoardViewSet(viewsets.ModelViewSet):
 
 
 class TaskViewSet(viewsets.ModelViewSet):
+    """CRUD endpoints for tasks plus ``assigned-to-me`` and ``reviewing``.
+
+    Board members may create, view and update tasks; only the task creator or
+    the board owner may delete a task.
+    """
+
     serializer_class = TaskSerializer
     http_method_names = [
         'get',
@@ -185,6 +202,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         url_path='assigned-to-me',
     )
     def assigned_to_me(self, request):
+        """Return the tasks assigned to the current user."""
         tasks = self.get_queryset().filter(
             assignee=request.user
         )
@@ -219,6 +237,12 @@ class TaskViewSet(viewsets.ModelViewSet):
 
 
 class CommentViewSet(viewsets.ModelViewSet):
+    """List, create and delete comments on a given task.
+
+    Any member of the task's board may read and add comments; only the comment
+    author may delete their own comment.
+    """
+
     serializer_class = CommentSerializer
     http_method_names = [
         'get',
