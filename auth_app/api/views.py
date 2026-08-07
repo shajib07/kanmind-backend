@@ -1,3 +1,5 @@
+"""API views for registration, login and email lookups."""
+
 from django.contrib.auth.models import User
 from rest_framework import permissions, status
 from rest_framework.authtoken.models import Token
@@ -13,6 +15,7 @@ from auth_app.api.serializers import (
 
 
 def get_auth_response_data(user):
+    """Return the auth token and profile payload for a user."""
     token, _ = Token.objects.get_or_create(user=user)
 
     return {
@@ -24,9 +27,12 @@ def get_auth_response_data(user):
 
 
 class RegistrationView(APIView):
+    """Register a new user and return an auth token."""
+
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        """Create the user and respond with their auth data."""
         serializer = RegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -38,9 +44,12 @@ class RegistrationView(APIView):
 
 
 class LoginView(APIView):
+    """Authenticate a user and return an auth token."""
+
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        """Validate the credentials and respond with the user's auth data."""
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
@@ -52,9 +61,12 @@ class LoginView(APIView):
 
 
 class EmailCheckView(APIView):
+    """Look up a user by email and return their summary if found."""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        """Return the matching user's summary, or 404 if none exists."""
         serializer = EmailCheckSerializer(
             data=request.query_params
         )

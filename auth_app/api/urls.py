@@ -1,3 +1,5 @@
+"""URL routes for the authentication API."""
+
 from django.urls import path
 
 from auth_app.api.views import EmailCheckView, LoginView, RegistrationView

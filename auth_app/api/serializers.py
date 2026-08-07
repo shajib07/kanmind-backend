@@ -1,3 +1,5 @@
+"""Serializers for user registration, login and email lookups."""
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -6,6 +8,8 @@ from rest_framework import serializers
 
 
 class RegistrationSerializer(serializers.ModelSerializer):
+    """Validate sign-up data and create a new user account."""
+
     repeated_password = serializers.CharField(write_only=True)
 
     class Meta:
@@ -21,6 +25,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
+        """Ensure the password and its confirmation match."""
         if attrs['password'] != attrs['repeated_password']:
             raise serializers.ValidationError(
                 {'password': 'Passwords do not match.'}
@@ -28,6 +33,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        """Create the user, storing the full name as ``first_name``."""
         fullname = validated_data.pop('fullname')
         validated_data.pop('repeated_password')
 
@@ -41,12 +47,15 @@ class RegistrationSerializer(serializers.ModelSerializer):
         return user
 
     def validate_email(self, value):
+        """Reject an email address that is already registered."""
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError('Email already exists.')
         return value
 
 
 class LoginSerializer(serializers.Serializer):
+    """Authenticate a user from their email and password."""
+
     email = serializers.EmailField(required=False)
     password = serializers.CharField(
         write_only=True,
@@ -54,6 +63,7 @@ class LoginSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
+        """Authenticate the credentials and attach the user to the data."""
         email = attrs.get('email')
         password = attrs.get('password')
         if not email or not password:
@@ -70,9 +80,12 @@ class LoginSerializer(serializers.Serializer):
 
 
 class EmailCheckSerializer(serializers.Serializer):
+    """Validate the ``email`` query parameter of the email-check endpoint."""
+
     email = serializers.CharField(required=False)
 
     def validate(self, attrs):
+        """Ensure the email is present and well-formed."""
         email = attrs.get('email')
         if not email:
             raise serializers.ValidationError(
@@ -88,6 +101,8 @@ class EmailCheckSerializer(serializers.Serializer):
 
 
 class UserSummarySerializer(serializers.ModelSerializer):
+    """Compact user representation used in nested API responses."""
+
     fullname = serializers.CharField(source='first_name')
 
     class Meta:

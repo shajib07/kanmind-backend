@@ -1,3 +1,5 @@
+"""Object- and view-level permissions for boards, tasks and comments."""
+
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import BasePermission
 
@@ -15,6 +17,7 @@ class IsBoardMemberOrOwner(BasePermission):
     message = 'You must be a member or the owner of this board.'
 
     def has_object_permission(self, request, view, obj):
+        """Return ``True`` if the user owns or is a member of the board."""
         return (
             obj.owner_id == request.user.id
             or obj.members.filter(pk=request.user.pk).exists()
@@ -27,13 +30,17 @@ class IsBoardOwner(BasePermission):
     message = 'Only the board owner can delete this board.'
 
     def has_object_permission(self, request, view, obj):
+        """Return ``True`` if the user owns the board."""
         return obj.owner_id == request.user.id
 
 
 class IsTaskBoardMember(BasePermission):
+    """Allow access only to members of the task's board."""
+
     message = 'You must be a board member to modify its tasks.'
 
     def has_permission(self, request, view):
+        """Require board membership when creating a task."""
         if view.action != 'create':
             return True
 
@@ -45,15 +52,19 @@ class IsTaskBoardMember(BasePermission):
         return board.members.filter(pk=request.user.pk).exists()
 
     def has_object_permission(self, request, view, obj):
+        """Return ``True`` if the user is a member of the task's board."""
         return obj.board.members.filter(pk=request.user.pk).exists()
 
 
 class IsTaskCreatorOrBoardOwner(BasePermission):
+    """Allow access only to the task's creator or the board owner."""
+
     message = (
         'Only the task creator or board owner can delete this task.'
     )
 
     def has_object_permission(self, request, view, obj):
+        """Return ``True`` if the user created the task or owns its board."""
         return (
             obj.created_by_id == request.user.id
             or obj.board.owner_id == request.user.id
@@ -61,16 +72,22 @@ class IsTaskCreatorOrBoardOwner(BasePermission):
 
 
 class IsCommentAuthor(BasePermission):
+    """Allow access only to the author of the comment."""
+
     message = 'Only the comment author can delete this comment.'
 
     def has_object_permission(self, request, view, obj):
+        """Return ``True`` if the user wrote the comment."""
         return obj.author_id == request.user.id
 
 
 class IsCommentBoardMember(BasePermission):
+    """Allow access only to members of the comment's board."""
+
     message = 'You must be a board member to access comments.'
 
     def has_permission(self, request, view):
+        """Return ``True`` if the user is a member of the task's board."""
         task = get_object_or_404(
             Task,
             pk=view.kwargs.get('task_id'),
